@@ -1,121 +1,93 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
-pragma abicoder v2;
 
-import "./Ownable.sol";
-
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract BooksLibrary is Ownable {
     struct Book {
-        uint16 id;
-        string name;
+        string title;
+        uint8 copies;
+        address[] bookBorrowedAddresses;
     }
 
-    string[] bookNames;
-    uint8[] availableCopies;
+    bytes32[] public bookId;
+    uint8 private availableBooksCount;
+    mapping(bytes32 => bool) public availableBooks;
+    mapping(bytes32 => Book) public books;
+    mapping(address => mapping(bytes32 => bool)) public borrowedBook;
+    
 
-    mapping(uint16 => address[]) private previouslyBorrowed;
-    mapping(address => uint16[]) private currentlyBorrows;
+    modifier validBookData(string memory _title, uint8 _copies) {
+        bytes memory tempTitle = bytes(_title);
+        require(tempTitle.length > 0 && _copies > 0, "Book data is not valid!");
+        _;
+    }
+    modifier bookDoesNotExist(bytes32 _bookId) {
+        require(bookExists(_bookId), "Book with such Id does not exist");
+        _;
+    }
 
-    function addBook(string memory _name, uint8 _copies) public onlyOwner {
-        bool bookAlreadyExists = false;
-        for (uint16 i = 0; i < bookNames.length; i++) {
-            if (
-                keccak256(abi.encodePacked(bookNames[i])) ==
-                keccak256(abi.encodePacked(_name))
-            ) {
-                availableCopies[i] += _copies;
-                bookAlreadyExists = true;
-                break;
+
+    function addBook(string memory _title, uint8 _copies) public onlyOwner validBookData(_title, _copies) {
+        bytes32 _bookId =keccak256(abi.encodePacked(_title));
+
+        if(!bookExists(_bookId)) {
+            address[] memory borrowed;
+            books[_bookId] = Book(_title, 0, borrowed);
+            bookId.push(_bookId);
+        }
+
+        books[_bookId].copies += _copies;
+        availableBooks[_bookId] = true;
+        availableBooksCount++;
+    }
+
+    function borrowBook(bytes32 _bookId) bookDoesNotExist(_bookId)  public {
+        require(!(borrowedBook[msg.sender][_bookId]), "You have already borrowed this book!");
+        require(availableBooks[_bookId], "There are no available copies of this book right now!");
+       
+        Book storage book = books[_bookId];
+        book.bookBorrowedAddresses.push(msg.sender);
+        book.copies--;
+
+        if (book.copies == 0) {
+            availableBooks[_bookId] = false;
+            availableBooksCount--;
+        }     
+
+        borrowedBook[msg.sender][_bookId] = true;
+    }
+
+    function returnBook(bytes32 _bookId) bookDoesNotExist(_bookId)  public {
+        require(!borrowedBook[msg.sender][_bookId], "You cannot return a book that you have not borrowed!");
+        
+        books[_bookId].copies++;
+        borrowedBook[msg.sender][_bookId] = false;
+        
+        if(!availableBooks[_bookId]) {
+            availableBooks[_bookId] = true;
+            availableBooksCount++;
+        }
+    }
+
+    function getAllAddressesThatBorrowedBook(bytes32 _bookId) bookDoesNotExist(_bookId) public view returns(address[] memory) {
+        return books[_bookId].bookBorrowedAddresses;
+    }
+
+    function getAllAvailableBookss() public view returns(bytes32[] memory) {
+        bytes32[] memory _availableBooks = new bytes32[](availableBooksCount);
+        
+        uint8 counter = 0;
+        for(uint8 i = 0; i < bookId.length; i++) {
+            if(availableBooks[bookId[i]]) {
+                _availableBooks[counter++] = bookId[i];
             }
         }
 
-        if (!bookAlreadyExists) {
-            bookNames.push(_name);
-            availableCopies.push(_copies);
-            previouslyBorrowed[(uint16)(bookNames.length - 1)] = new address[](
-                0
-            );
-        }
+        return _availableBooks;
     }
 
-    function showAvailableBooks() public view returns (Book[] memory) {
-        uint16 availableBooksCount = 0;
-        for (uint16 i = 0; i < bookNames.length; i++) {
-            if (availableCopies[i] > 0) {
-                availableBooksCount++;
-            }
-        }
-
-        if (availableBooksCount == 0) {
-            return new Book[](0);
-        }
-
-        Book[] memory availableBooks = new Book[](availableBooksCount);
-        uint16 index = 0;
-        for (uint16 i = 0; i < bookNames.length; i++) {
-            if (availableCopies[i] > 0) {
-                Book memory book = Book(i, bookNames[i]);
-                availableBooks[index++] = book;
-            }
-        }
-
-        return availableBooks;
-    }
-
-    function borrowBook(uint16 _id) public {
-        require(_id < bookNames.length, "There is no book with this id");
-
-        for (uint8 i = 0; i < currentlyBorrows[msg.sender].length; i++) {
-            require(
-                currentlyBorrows[msg.sender][i] != _id,
-                "You already have borrowed a copy of this book"
-            );
-        }
-
-        require(
-            availableCopies[_id] > 0,
-            "There are no available copies of this book right now"
-        );
-
-        availableCopies[_id]--;
-        currentlyBorrows[msg.sender].push(_id);
-        previouslyBorrowed[_id].push(msg.sender);
-    }
-
-    function returnBook(uint16 _id) public {
-        require(_id < bookNames.length, "There is no book with this id");
-
-        bool hasBorrowed = false;
-        for (uint8 i = 0; i < currentlyBorrows[msg.sender].length; i++) {
-            if (currentlyBorrows[msg.sender][i] == _id) {
-                hasBorrowed = true;
-                for (
-                    uint8 j = i;
-                    j < currentlyBorrows[msg.sender].length - 1;
-                    j++
-                ) {
-                    currentlyBorrows[msg.sender][j] = currentlyBorrows[
-                        msg.sender
-                    ][j + 1];
-                }
-            }
-
-            if (hasBorrowed == true) break;
-        }
-        require(
-            hasBorrowed,
-            "You have not borrowed a copy of this book - so you cannot return one"
-        );
-
-        availableCopies[_id]++;
-    }
-
-    function getBorrowingHistory(uint16 _id)
-        public
-        view
-        returns (address[] memory)
-    {
-        return previouslyBorrowed[_id];
+    function bookExists(bytes32 _bookId) private view returns(bool) {
+        return(keccak256(abi.encodePacked(books[_bookId].title)) != keccak256(abi.encodePacked("")));
     }
 }
