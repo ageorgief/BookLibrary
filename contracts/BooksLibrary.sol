@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract BooksLibrary is Ownable {
     struct Book {
+        string author;
         string title;
         uint8 copies;
         address[] bookBorrowedAddresses;
@@ -18,28 +19,30 @@ contract BooksLibrary is Ownable {
     mapping(address => mapping(bytes32 => bool)) public borrowedBook;
     
 
-    event LogAddedBook(bytes32 id, string title, uint8 copies);
+    event LogAddedBook(bytes32 id, string author, string title, uint8 copies);
     event LogBorrowedBook(address borrowerAddress, bytes32 bookId);
     event LogReturnedBook(address returnerAddress, bytes32 bookId);
 
 
-    modifier validBookData(string memory _title, uint8 _copies) {
+    modifier validBookData(string memory _author, string memory _title, uint8 _copies) {
+        bytes memory tempAuthor = bytes(_author);
         bytes memory tempTitle = bytes(_title);
-        require(tempTitle.length > 0 && _copies > 0, "Book data is not valid!");
+
+        require(tempAuthor.length > 0 && tempTitle.length > 0 && _copies > 0, "Book data is not valid!");
         _;
     }
-    modifier bookDoesNotExist(bytes32 _bookId) {
-        require(bookExists(_bookId), "Book with such Id does not exist");
+    modifier bookExists(bytes32 _bookId) {
+        require(libraryContainsBook(_bookId), "Book with such Id does not exist");
         _;
     }
 
 
-    function addBook(string memory _title, uint8 _copies) public onlyOwner validBookData(_title, _copies) {
+    function addBook(string memory _author, string memory _title, uint8 _copies) public onlyOwner validBookData(_author, _title, _copies) {
         bytes32 _bookId = keccak256(abi.encodePacked(_title));
 
-        if(!bookExists(_bookId)) {
+        if(!libraryContainsBook(_bookId)) {
             address[] memory borrowed;
-            books[_bookId] = Book(_title, 0, borrowed);
+            books[_bookId] = Book(_author, _title, 0, borrowed);
             bookId.push(_bookId);
         }
 
@@ -47,10 +50,10 @@ contract BooksLibrary is Ownable {
         availableBooks[_bookId] = true;
         availableBooksCount++;
 
-        emit LogAddedBook(_bookId, _title, _copies);
+        emit LogAddedBook(_bookId, _author, _title, _copies);
     }
 
-    function borrowBook(bytes32 _bookId) bookDoesNotExist(_bookId)  public {
+    function borrowBook(bytes32 _bookId) bookExists(_bookId)  public {
         require(!(borrowedBook[msg.sender][_bookId]), "You have already borrowed this book!");
         require(availableBooks[_bookId], "There are no available copies of this book right now!");
        
@@ -68,7 +71,7 @@ contract BooksLibrary is Ownable {
         emit LogBorrowedBook(msg.sender, _bookId);
     }
 
-    function returnBook(bytes32 _bookId) bookDoesNotExist(_bookId)  public {
+    function returnBook(bytes32 _bookId) bookExists(_bookId) public {
         require(borrowedBook[msg.sender][_bookId], "You cannot return a book that you have not borrowed!");
         
         books[_bookId].copies++;
@@ -82,7 +85,7 @@ contract BooksLibrary is Ownable {
         emit LogReturnedBook(msg.sender, _bookId);
     }
 
-    function getAllAddressesThatBorrowedBook(bytes32 _bookId) bookDoesNotExist(_bookId) public view returns(address[] memory) {
+    function getAllAddressesThatBorrowedBook(bytes32 _bookId) bookExists(_bookId) public view returns(address[] memory) {
         return books[_bookId].bookBorrowedAddresses;
     }
 
@@ -99,7 +102,7 @@ contract BooksLibrary is Ownable {
         return _availableBooks;
     }
 
-    function bookExists(bytes32 _bookId) private view returns(bool) {
-        return(keccak256(abi.encodePacked(books[_bookId].title)) != keccak256(abi.encodePacked("")));
+    function libraryContainsBook(bytes32 _bookId) private view returns(bool) {
+        return (keccak256(abi.encodePacked(books[_bookId].title)) != keccak256(abi.encodePacked("")));
     }
 }

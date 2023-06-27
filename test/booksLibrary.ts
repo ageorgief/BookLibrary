@@ -17,8 +17,8 @@ describe("BooksLibrary", function () {
     it("Should return all available books ", async function () {
         const [owner, addr1] = await ethers.getSigners();
 
-        await booksLibrary.addBook("Book1", 1); //Adding book to library
-        await booksLibrary.addBook("Book2", 2); //Adding book to library
+        await booksLibrary.addBook("Author1", "Book1", 1); //Adding book to library
+        await booksLibrary.addBook("Author2", "Book2", 2); //Adding book to library
 
         expect((await booksLibrary.getAllAvailableBooks()).length).to.equal(2);
 
@@ -33,7 +33,7 @@ describe("BooksLibrary", function () {
     });
 
     it("Should add book and get book by id", async function () {
-        await booksLibrary.addBook("Title", 125); //Adding book to library
+        await booksLibrary.addBook("Author", "Title", 125); //Adding book to library
         const bookId = ethers.utils.solidityKeccak256(["string"],["Title"]); //Get bookId
 
         expect((await booksLibrary.books(bookId)).title).to.equal("Title"); //Title
@@ -41,7 +41,7 @@ describe("BooksLibrary", function () {
     });
 
     it("Should add more copie to existing book", async function () {
-        await booksLibrary.addBook("Title", 125); //Adding book to library    
+        await booksLibrary.addBook("Author", "Title", 125); //Adding book to library    
         const bookId = ethers.utils.solidityKeccak256(["string"],["Title"]); //Get bookId
 
         expect((await booksLibrary.books(bookId)).copies).to.equal(250); //125
@@ -50,20 +50,22 @@ describe("BooksLibrary", function () {
     it("Should throw on trying to add book with not the owner", async function () {
         const [owner, addr1] = await ethers.getSigners();
 
-        await expect(booksLibrary.connect(addr1).addBook("Title", 125)).to.be.revertedWith('Ownable: caller is not the owner');
+        await expect(booksLibrary.connect(addr1).addBook("Author", "Title", 125)).to.be.revertedWith('Ownable: caller is not the owner');
     });
 
     it("Should throw on trying to add book with not valid arguments", async function () {
-        await expect(booksLibrary.addBook("Title", 0)).to.be.revertedWith('Book data is not valid!');
-        await expect(booksLibrary.addBook("", 15)).to.be.revertedWith('Book data is not valid!');
-        await expect(booksLibrary.addBook("", 0)).to.be.revertedWith('Book data is not valid!');
+        await expect(booksLibrary.addBook("Author", "Title", 0)).to.be.revertedWith('Book data is not valid!');
+        await expect(booksLibrary.addBook("Author", "", 15)).to.be.revertedWith('Book data is not valid!');
+        await expect(booksLibrary.addBook("", "Title", 5)).to.be.revertedWith('Book data is not valid!');
+        await expect(booksLibrary.addBook("", "", 0)).to.be.revertedWith('Book data is not valid!');
+
     });
 
     it(`Should borrow book and user's address should be marked as true in borrowedBook, 
         book copies should be less with 1 and book's bookBorrowedAddresses should contain user's address`, async function () {
         const [owner, addr1] = await ethers.getSigners();
 
-        await booksLibrary.addBook("Title2", 125); //Adding book to library
+        await booksLibrary.addBook("Author2", "Title2", 125); //Adding book to library
         const bookId = ethers.utils.solidityKeccak256(["string"],["Title2"]); //Get bookId
         const copies = (await booksLibrary.books(bookId)).copies;
         await booksLibrary.connect(addr1).borrowBook(bookId);
@@ -75,7 +77,7 @@ describe("BooksLibrary", function () {
     it("Should throw on trying to borrow book from address that have already borrowed the book", async function () {
         const [owner, addr1, addr2] = await ethers.getSigners();
        
-        await booksLibrary.addBook("Harry Potter", 6); //Adding book to library
+        await booksLibrary.addBook("JJ. K. Rowling", "Harry Potter", 6); //Adding book to library
         
         const bookId = ethers.utils.solidityKeccak256(["string"],["Harry Potter"]);
       
@@ -88,7 +90,7 @@ describe("BooksLibrary", function () {
     it("Should throw on trying to borrow book with no available coppies at the moment", async function () {
         const [owner, addr1, addr2] = await ethers.getSigners();
        
-        await booksLibrary.addBook("Dune", 1); //Adding book to library
+        await booksLibrary.addBook("Frank Herbert", "Dune", 1); //Adding book to library
         
         const bookId = ethers.utils.solidityKeccak256(["string"],["Dune"]);
       
@@ -110,7 +112,7 @@ describe("BooksLibrary", function () {
     it(`Should expect address that returns book to be false in borrowedBook and copies of that book to be more with 1 after the return`, async function () {
         const [owner, addr1] = await ethers.getSigners();
 
-        await booksLibrary.addBook("Title3", 2);
+        await booksLibrary.addBook("Author3", "Title3", 2);
         const bookId = ethers.utils.solidityKeccak256(["string"],["Title3"]);
         const copies = (await booksLibrary.books(bookId)).copies;
         
@@ -125,7 +127,7 @@ describe("BooksLibrary", function () {
     it(`Should expect available books to be more with 1 after address returns book that is not available at the moment`, async function () {
         const [owner, addr1] = await ethers.getSigners();
 
-        await booksLibrary.addBook("Title4", 1);
+        await booksLibrary.addBook("Author4", "Title4", 1);
         const bookId = ethers.utils.solidityKeccak256(["string"],["Title4"]);
         
         await booksLibrary.connect(addr1).borrowBook(bookId);
@@ -138,7 +140,7 @@ describe("BooksLibrary", function () {
     it("Should throw on trying to return a book from address that have not borrowed the book", async function () {
         const [owner, addr1] = await ethers.getSigners();
 
-        await booksLibrary.addBook("Lord of the rings", 100); //Adding book to library
+        await booksLibrary.addBook("J. R. R. Tolkien", "Lord of the rings", 100); //Adding book to library
         const bookId = ethers.utils.solidityKeccak256(["string"],["Lord of the rings"]);
 
         await expect(booksLibrary.connect(addr1).returnBook(bookId)).to.be.revertedWith('You cannot return a book that you have not borrowed!');
